@@ -1,0 +1,96 @@
+﻿@using WordleBot.Models;
+@using WordleBot.Services;
+
+@page "/wordle"
+
+<Div>
+    <Animate Animation="Animations.ZoomIn" Duration="TimeSpan.FromSeconds(0.5)">
+        <h1 class="text-center">Welcome to the Wordle Bot</h1>
+    </Animate>
+</Div>
+
+<Div>
+    <ApplicationLoadingIndicator />
+    <Modal @ref="modalRefWin">
+        <ModalContent Centered>
+            <ModalHeader>
+                <ModalTitle>Game Over!</ModalTitle>
+                <CloseButton />
+            </ModalHeader>
+            <ModalBody TextAlignment="TextAlignment.Center">
+                <i class="fas fa-check fa-lg" style="color: green"></i>
+                <p>Wordle Bot has won the game!</p>
+                <a href="/wordle">Click here to play again.</a>
+            </ModalBody>
+        </ModalContent>
+    </Modal>
+    <Modal @ref="modalRefLose">
+        <ModalContent Centered>
+            <ModalHeader>
+                <ModalTitle>Game Over!</ModalTitle>
+                <CloseButton />
+            </ModalHeader>
+            <ModalBody TextAlignment="TextAlignment.Center">
+                <i class="fa-solid fa-x fa-lg" style="color: red"></i>
+                <p>Wordle Bot has lost the game!</p>
+                <a href="/wordle">Click here to play again.</a>
+            </ModalBody>
+        </ModalContent>
+    </Modal>
+    <Tabs RenderMode="TabsRenderMode.LazyLoad" SelectedTab="@SelectedTabName">
+        <Items>
+            @for (int guessIndex = 0; guessIndex < WordleStateContainer.NUMBER_OF_GUESSES_ALLLOWED; guessIndex++)
+            {
+                var localVariable = guessIndex;
+                <Tab Disabled Name="@("tab_"+guessIndex)">Guess @(localVariable + 1)</Tab>
+            }
+        </Items>
+        <Content>
+            @for (int guessIndex = 0; guessIndex < WordleStateContainer.NUMBER_OF_GUESSES_ALLLOWED; guessIndex++)
+            {
+                var localVariable = guessIndex;
+                <TabPanel Name="@("tab_"+localVariable)">
+                    <Wordle CurrentTab="localVariable" IsInitialGuess="@(localVariable==0)" 
+                        NavigateToNextTabOnSubmit="NavigateToNextTabOnSubmitHandler"
+                        GameCompleted="GameCompleted"/>
+                </TabPanel>
+            }
+        </Content>
+    </Tabs>
+</Div>
+
+@code {
+
+    [Inject]
+    public IWordleStateContainer WordleStateContainerService { get; set; }
+
+    public string SelectedTabName { get; set; } = "tab_0";
+    private Modal modalRefWin;
+    private Modal modalRefLose;
+    private List<string> errorMessages;
+
+    protected override void OnInitialized()
+    {
+        WordleStateContainerService.NewGame();
+    }
+
+    private void NavigateToNextTabOnSubmitHandler(string tabName)
+    {
+        SelectedTabName = tabName;
+
+    }
+
+    private void GameCompleted(bool hasPlayerWonGame)
+    {
+        if (hasPlayerWonGame)
+        {
+            modalRefWin.Show();
+        }
+        else
+        {
+            modalRefLose.Show();
+        }     
+    }
+
+
+}

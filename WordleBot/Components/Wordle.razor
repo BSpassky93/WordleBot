@@ -1,0 +1,269 @@
+﻿@using System.Text.RegularExpressions;
+@using System.ComponentModel;
+@using System.Text;
+@using Blazorise.LoadingIndicator;
+@using WordleBot.Models;
+@using WordleBot.Services;
+
+@* Inject External Services *@
+@inject IJSRuntime JSRuntime;
+@inject ILoadingIndicatorService ApplicationLoadingIndicatorService;
+
+
+<Div>
+    @if (GuessFromApi != null)
+    {
+        <Table class="game-board mx-auto w-auto" Responsive=true>
+            <TableRow>
+                <TableRowCell>
+                    <h4 class="text-center">Wordle Bot's Guess</h4>
+                    <ButtonRowTemplate>
+                        @for (int letterIndex = 0; letterIndex < GuessFromApi.Count(); letterIndex++)
+                        {
+                            var letter = GuessFromApi[letterIndex];
+                            var index = letterIndex;
+                            <Button id="@("guess_letter_"+CurrentTab+index)" Margin="Margin.Is1" class="border border-dark letter-button">@letter</Button>
+                        }
+                    </ButtonRowTemplate>
+                </TableRowCell>
+            </TableRow>
+        </Table>
+    }
+</Div>
+<fieldset disabled="@(IsFormDisabled)">
+    <Div Margin="Margin.Is4">
+        <h4 class="text-center">Enter Your Clues For The Bot!</h4>
+        <Table class="game-board mx-auto w-auto" Responsive=true>
+            <TableRow>
+                <TableRowCell>
+                    <ButtonRowTemplate>
+                        @for (int letterIndex = 0; letterIndex < 5; letterIndex++)
+                        {
+                            var index = letterIndex;
+                            <Button Margin="Margin.Is1" Color="Color.Success" class="letter-button" Clicked="@(e => OnClueSelected(Clue.Green, index))"></Button>
+                        }
+                    </ButtonRowTemplate>
+                </TableRowCell>
+            </TableRow>
+            <TableRow>
+                <TableRowCell>
+                    <ButtonRowTemplate>
+                        @for (int letterIndex = 0; letterIndex < 5; letterIndex++)
+                        {
+                            var index = letterIndex;
+                            <Button Margin="Margin.Is1" Style="background-color: yellow" class="letter-button" Clicked="@(e => OnClueSelected(Clue.Yellow, index))"></Button>
+                        }
+                    </ButtonRowTemplate>
+                </TableRowCell>
+            </TableRow>
+            <TableRow>
+                <TableRowCell>
+                    <ButtonRowTemplate>
+                        @for (int letterIndex = 0; letterIndex < 5; letterIndex++)
+                        {
+                            var index = letterIndex;
+                            <Button Margin="Margin.Is1" Style="background-color: gray" class="border border-dark letter-button" Clicked="@(e => OnClueSelected(Clue.White, index))"></Button>
+                        }
+                    </ButtonRowTemplate>
+                </TableRowCell>
+            </TableRow>
+        </Table>
+        <Table class="game-board mx-auto w-auto" Responsive=true>
+            <Field>
+                <Button Color="Color.Primary" Type="ButtonType.Submit" Disabled="@(!IsValidForm)" PreventDefaultOnSubmit Clicked="@OnSubmitClicked">Submit</Button>
+             </Field>
+
+         </Table>
+     </Div>
+ </fieldset>
+
+ <ErrorMessage ErrorMessages="errorMessages" />
+
+ @code {
+    // Inject Internal Services
+    [Inject]
+    public IWordleSolverService WordleSolverService { get; set; }
+    [Inject]
+    public IWordleStateContainer WordleStateContainer { get; set; }
+
+    [Parameter]
+    public int CurrentTab { get; set; }
+    [Parameter]
+    public bool IsInitialGuess { get; set; }
+    [Parameter]
+    public EventCallback<string> NavigateToNextTabOnSubmit { get; set; }
+    [Parameter]
+    public EventCallback<bool> GameCompleted { get; set; }
+
+    public string GuessFromApi { get; set; }
+    public bool IsValidForm { get; set; }
+    public LoadingIndicator spinner { get; set; }
+    private SortedDictionary<int, Clue> _cluesDictionary = new SortedDictionary<int, Clue>();
+    private List<string> errorMessages = new List<string>();
+    private bool IsFormDisabled { get; set; } = false;
+    private IJSObjectReference _module;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            _module = await JSRuntime.InvokeAsync<IJSObjectReference>("import", "./Components/Wordle.razor.js");
+        }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await ApplicationLoadingIndicatorService.Show();
+
+        if (IsInitialGuess)
+        {
+            //Setup Empty Array if first Tab / Guess
+            List<WordleRequest> request = new List<WordleRequest>() { };
+            var response = await WordleSolverService.GetWordleResultAsync(request);
+            GuessFromApi = response.Guess;
+            WordleStateContainer.InitTab(CurrentTab, null, GuessFromApi);
+        }
+
+        WordleTab? tab = WordleStateContainer.GetTabById(CurrentTab);
+
+        if (tab != null)
+        {
+            GuessFromApi = tab.GuessFromApi;
+        }
+
+        await ApplicationLoadingIndicatorService.Hide();
+    }
+
+    public async Task OnClueSelected(Clue clue, int letterIndex)
+    {
+        if (_cluesDictionary.ContainsKey(letterIndex))
+        {
+            _cluesDictionary[letterIndex] = clue;
+        }
+        else
+        {
+            _cluesDictionary.Add(letterIndex, clue);
+        };
+
+        //Invoke JS Function to grab element by Id and set color on corresponding letter in the guess
+        await _module.InvokeVoidAsync("setClueColorOnLetter", "guess_letter_" + CurrentTab + letterIndex, clue);
+
+        IsValidForm = _cluesDictionary.Count == 5;
+    }
+
+    public async Task OnSubmitClicked()
+    {
+        errorMessages.Clear();
+        bool playerHasWon = CheckIfPlayerHasWon();
+        if (playerHasWon)
+        {
+            IsFormDisabled = true;
+            await GameCompleted.InvokeAsync(playerHasWon);
+            return;
+        }
+
+        await ApplicationLoadingIndicatorService.Show();
+
+        //TODO: change to use setting
+        var clues = new StringBuilder();
+
+        foreach (var pair in _cluesDictionary)
+        {
+            clues.Append(GetClueLetterFromEnum(pair.Value));
+        }
+
+        WordleRequest request = new WordleRequest()
+            {
+                Word = GuessFromApi,
+                Clue = clues.ToString()
+            };
+
+        List<WordleRequest> requestList = WordleStateContainer.GetRequestListFromTabs();
+        requestList.Add(request);
+
+        try
+        {
+            var response = await WordleSolverService.GetWordleResultAsync(requestList);
+
+            WordleStateContainer.IncrementGuess();
+            //Disable Fields On Successful Submission
+            IsFormDisabled = true;
+
+            if (WordleStateContainer.IsGameComplete())
+            {
+                await GameCompleted.InvokeAsync(playerHasWon);
+                return;
+            }
+            else
+            {
+                //Create Next Tab and Navigate to Tab
+                WordleStateContainer.InitTab(CurrentTab + 1, request, response.Guess);
+                await NavigateToNextTabOnSubmit.InvokeAsync("tab_" + (CurrentTab + 1));
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessages.Add(ex.Message);
+        }
+        finally
+        {
+            await ApplicationLoadingIndicatorService.Hide();
+        }
+    }
+
+    private bool CheckIfPlayerHasWon()
+    {
+        bool hasWon = true;
+        var clueValues = _cluesDictionary.Values;
+        foreach (var clue in clueValues)
+        {
+            if (clue != Clue.Green)
+            {
+                hasWon = false;
+                return hasWon;
+            }
+        }
+
+        return hasWon;
+    }
+
+    private char GetClueLetterFromEnum(Clue clue)
+    {
+        char charClue;
+        switch (clue)
+        {
+            case Clue.Green:
+                charClue = 'g';
+                break;
+            case Clue.Yellow:
+                charClue = 'y';
+                break;
+            case Clue.White:
+                charClue = 'x';
+                break;
+            default:
+                throw new ArgumentOutOfRangeException("Unknown Clue Value");
+
+        }
+
+        return charClue;
+    }
+
+    public enum Clue
+    {
+        Green,
+        Yellow,
+        White
+    }
+}
+
+<style>
+    .letter-button {
+        width: 40px !important;
+        height: 40px !important;
+    }
+
+    td {
+        display: block;
+    }
+</style>
