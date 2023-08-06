@@ -4,7 +4,7 @@ namespace WordleBot.Services
 {
     public class WordleStateContainer : IWordleStateContainer
     {
-        public const int NUMBER_OF_GUESSES_ALLLOWED = 5;
+        public const int NUMBER_OF_GUESSES_ALLLOWED = 6;
         private int _numberOfGuesses = 0;
         private List<WordleRequest> _wordleRequestList = new List<WordleRequest>() { };
         public List<WordleTab> Tabs = new List<WordleTab>();

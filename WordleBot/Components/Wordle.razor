@@ -120,6 +120,7 @@
             //Setup Empty Array if first Tab / Guess
             List<WordleRequest> request = new List<WordleRequest>() { };
             var response = await WordleSolverService.GetWordleResultAsync(request);
+            WordleStateContainer.IncrementGuess();
             GuessFromApi = response.Guess;
             WordleStateContainer.InitTab(CurrentTab, null, GuessFromApi);
         }
@@ -155,7 +156,7 @@
     {
         errorMessages.Clear();
         bool playerHasWon = CheckIfPlayerHasWon();
-        if (playerHasWon)
+        if (playerHasWon || WordleStateContainer.IsGameComplete())
         {
             IsFormDisabled = true;
             await GameCompleted.InvokeAsync(playerHasWon);
@@ -185,7 +186,6 @@
         {
             var response = await WordleSolverService.GetWordleResultAsync(requestList);
 
-            WordleStateContainer.IncrementGuess();
             //Disable Fields On Successful Submission
             IsFormDisabled = true;
 
@@ -196,6 +196,7 @@
             }
             else
             {
+                WordleStateContainer.IncrementGuess();
                 //Create Next Tab and Navigate to Tab
                 WordleStateContainer.InitTab(CurrentTab + 1, request, response.Guess);
                 await NavigateToNextTabOnSubmit.InvokeAsync("tab_" + (CurrentTab + 1));

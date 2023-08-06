@@ -32,17 +32,11 @@ namespace WordleBot.Services
                     }
 
                     return await response.Content.ReadFromJsonAsync<WordleResponse>();
-                    //return await JsonSerializer.Deserialize<WordleResponse>(content);
                 }
                 else
                 {
                     var message = await response.Content.ReadAsStringAsync();
                     throw new Exception($"Http status code: {response.StatusCode} message: {message}");
-                }
-
-                if (!response.IsSuccessStatusCode)
-                {
-                    throw new ApplicationException(content);
                 }
             }
             catch (Exception ex)
@@ -51,17 +45,6 @@ namespace WordleBot.Services
                 Console.WriteLine(ex.Message);
                 throw;
             }
-
-            //wordleResponse = JsonSerializer.Deserialize<WordleResponse>(content);
-            //wordleResponse = await response.Content.ReadFromJsonAsync<WordleResponse>();
-
-            //For Debugging In Dev
-            //string jsonString = JsonSerializer.Serialize(request);
-            //Console.WriteLine(jsonString);
-
-
-            // convert response data to Article object
-            //wordleResponse = await response.Content.ReadFromJsonAsync<WordleResponse>();
         }
     }
 }
